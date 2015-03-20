@@ -35,7 +35,7 @@ from pylab import *
 #########################
 
 # Main Directory
-homePath = "/Specify/path/to/EAPhy_master/"
+homePath = "/Specify/path/to/EAPhy-master/"
 
 # Specify folder containing the best contigs for each locus. If haplotype data, both haplotypes for each indiv should be included in one locus fasta file, but with seq ID/names indicating H0 or H1 (see individuals/datatype)
 bestcontigPath = os.path.join(homePath, 'examples', 'haplotype', 'test_haplo_contigs')
