@@ -118,6 +118,14 @@ unique = 1              # Sample only one SNP per gene? 1 = yes, 0 = no. If yes,
 # Automated Analysis
 #########################
 
+# First check whether the Data type is specified correctly:
+if datatype == 'ambiguous':
+    print 'Diplotype sequence data with heterozygous sites coded according to IUPAC'
+elif datatype == 'haplotype':
+    print 'Phased haplotype data'
+else:
+    sys.exit("The datatype is incorrectly specified, please check manual and double check the config script")
+
 # Create a general results folder in case it doesn't exist yet
 resultsDir = os.path.join(homePath, 'results')
 if (complete == 1) or (subset_indivs == 1):
@@ -192,9 +200,10 @@ outDir_align_check_passed = os.path.join(outDir_align_check, "1.alignments_passe
 outDir_align_check_passed_alignments = os.path.join(outDir_align_check_passed, "alignments")
 outDir_align_check_inspect = os.path.join(outDir_align_check, "2.alignments_to_check")
 outDir_align_check_inspect_alignments = os.path.join(outDir_align_check_inspect, "alignments")
-outDir_align_check_paralog = os.path.join(outDir_align_check, "3.alignments_paralogy")
-outDir_align_check_paralog_alignments = os.path.join(outDir_align_check_paralog, "alignments")
-outDir_align_check_filtered = os.path.join(outDir_align_check, "4.alignments_filtered")
+if datatype == 'haplotype':
+    outDir_align_check_filtered = os.path.join(outDir_align_check, "3.alignments_filtered")
+else:
+    outDir_align_check_filtered = os.path.join(outDir_align_check, "4.alignments_filtered")
 if (complete == 1) or (align_check == 1):
     import check_frame_gaps
     import check_paralogs
@@ -207,15 +216,12 @@ if (complete == 1) or (align_check == 1):
         subprocess.call("mkdir '%s'" % (outDir_align_check_passed_alignments), shell=True)
         subprocess.call("mkdir '%s'" % (outDir_align_check_inspect), shell=True)
         subprocess.call("mkdir '%s'" % (outDir_align_check_inspect_alignments), shell=True)
-        subprocess.call("mkdir '%s'" % (outDir_align_check_paralog), shell=True)
         subprocess.call("mkdir '%s'" % (outDir_align_check_filtered), shell=True)
     list_passed_align = os.path.join(outDir_align_check_passed, 'alignments_passed.txt')
     list_inspect_align = os.path.join(outDir_align_check_inspect, 'alignments_require_inspection.txt')
-    list_paralog_align = os.path.join(outDir_align_check_paralog, 'alignments_potential_paralogs.txt')
     list_filtered_align = os.path.join(outDir_align_check_filtered, 'alignments_filtered.txt')
     file_handle_correct = open(list_passed_align, 'w')
     file_handle_wrong = open(list_inspect_align, 'w')
-    file_handle_paralog = open(list_paralog_align, 'w')
     file_handle_filtered = open(list_filtered_align, 'w')
     empty_align = []
     for alignment in os.listdir(outDir_align_basic):
@@ -245,31 +251,42 @@ if (complete == 1) or (align_check == 1):
                     subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_inspect_alignments), shell=True)
         else:
             pass
-    average_heterozygosity = []
-    filtered_align_counter = 0
-    for filtered_align in loci_correct:
-        filtered_align_counter += 1
-        new_alignment_path = os.path.join(outDir_align_check_temp, filtered_align)
-        average_heterozygosity.append(check_paralogs.calcAverageIndivHet(new_alignment_path))
-    average_heterozygosity.sort()
-    cut_off_value = int(average_heterozygosity_cut_off * filtered_align_counter)
-    if cut_off_value != filtered_align_counter:
-        cut_off = average_heterozygosity[cut_off_value]
+    if datatype == 'ambiguous':
+        outDir_align_check_paralog = os.path.join(outDir_align_check, "3.alignments_paralogy")
+        subprocess.call("mkdir '%s'" % (outDir_align_check_paralog), shell=True)
+        list_paralog_align = os.path.join(outDir_align_check_paralog, 'alignments_potential_paralogs.txt')
+        file_handle_paralog = open(list_paralog_align, 'w')
+        average_heterozygosity = []
+        filtered_align_counter = 0
+        for filtered_align in loci_correct:
+            filtered_align_counter += 1
+            new_alignment_path = os.path.join(outDir_align_check_temp, filtered_align)
+            average_heterozygosity.append(check_paralogs.calcAverageIndivHet(new_alignment_path))
+        average_heterozygosity.sort()
+        cut_off_value = int(average_heterozygosity_cut_off * filtered_align_counter)
+        if cut_off_value != filtered_align_counter:
+            cut_off = average_heterozygosity[cut_off_value]
+        else:
+            cut_off = average_heterozygosity[filtered_align_counter - 1]
+        check_paralogs.plotAverageHet(average_heterozygosity, cut_off, outDir_align_check_paralog)
+        for filtered_align in loci_correct:
+            new_alignment_path = os.path.join(outDir_align_check_temp, filtered_align)
+            if (check_paralogs.calcAverageIndivHet(new_alignment_path) < cut_off) == True:
+                file_handle_correct.write(filtered_align + '\n')
+                file_handle_filtered.write(filtered_align + '\n')
+                subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_passed_alignments), shell=True)
+            else:
+                file_handle_paralog.write(new_alignment + '\n')
+                subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_inspect_alignments), shell=True)
+        file_handle_paralog.close()
     else:
-        cut_off = average_heterozygosity[filtered_align_counter - 1]
-    check_paralogs.plotAverageHet(average_heterozygosity, cut_off, outDir_align_check_paralog)
-    for filtered_align in loci_correct:
-        new_alignment_path = os.path.join(outDir_align_check_temp, filtered_align)
-        if (check_paralogs.calcAverageIndivHet(new_alignment_path) < cut_off) == True:
+        for filtered_align in loci_correct:
+            new_alignment_path = os.path.join(outDir_align_check_temp, filtered_align)
             file_handle_correct.write(filtered_align + '\n')
             file_handle_filtered.write(filtered_align + '\n')
             subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_passed_alignments), shell=True)
-        else:
-            file_handle_paralog.write(new_alignment + '\n')
-            subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_inspect_alignments), shell=True)
     file_handle_wrong.close()
     file_handle_correct.close()
-    file_handle_paralog.close()
     file_handle_filtered.close()
     subprocess.call("rm -r '%s'" % (outDir_align_check_temp), shell=True)
     subprocess.call("cp -r '%s' '%s'" % (outDir_align_check_passed_alignments, outDir_align_check_filtered), shell=True)
@@ -278,7 +295,10 @@ else:
 
 
 # Calculate alignment statistics
-outDir_align_check_stats = os.path.join(outDir_align_check, "5.filtered_align_stats")
+if datatype == 'ambiguous':
+    outDir_align_check_stats = os.path.join(outDir_align_check, "5.filtered_align_stats")
+else:
+    outDir_align_check_stats = os.path.join(outDir_align_check, "4.filtered_align_stats")
 if (complete == 1) or (align_stats == 1):
     import filt_align_stats
     if os.path.isdir(outDir_align_check_stats):
