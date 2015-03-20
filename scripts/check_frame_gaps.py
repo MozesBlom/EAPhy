@@ -103,7 +103,7 @@ def removeGaps(alignment, alignment_path, outDir_align_check_temp, indiv_gap_win
                 pass
             length_alignment_checked += 1
         final_align_length = final_align.get_alignment_length()
-        final_align = final_align[:, 3:final_align_length]
+        final_align = final_align[:, 0:final_align_length]
         out_path_file = os.path.join(outDir_align_check_temp, (name + "_gaps_analyzed.fasta"))
         file_out_handle = open(out_path_file, "w")
         AlignIO.write(final_align, file_out_handle, "fasta")
@@ -137,7 +137,7 @@ def removeGaps(alignment, alignment_path, outDir_align_check_temp, indiv_gap_win
             msa_temp.append(SeqRecord(Seq(sequence, generic_alphabet), id=record.id))
             temp_alignment = MultipleSeqAlignment(msa_temp)
         temp_alignment_length = temp_alignment.get_alignment_length()
-        temp_alignment = temp_alignment[:, 3:temp_alignment_length]
+        temp_alignment = temp_alignment[:, 0:temp_alignment_length]
         out_path_file = os.path.join(outDir_align_check_temp, (name + "_gaps_analyzed.fasta"))
         file_out_handle = open(out_path_file, "w")
         AlignIO.write(temp_alignment, file_out_handle, "fasta")
