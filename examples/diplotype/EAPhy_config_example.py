@@ -264,14 +264,11 @@ if (complete == 1) or (align_check == 1):
             average_heterozygosity.append(check_paralogs.calcAverageIndivHet(new_alignment_path))
         average_heterozygosity.sort()
         cut_off_value = int(average_heterozygosity_cut_off * filtered_align_counter)
-        if cut_off_value != filtered_align_counter:
-            cut_off = average_heterozygosity[cut_off_value]
-        else:
-            cut_off = average_heterozygosity[filtered_align_counter - 1]
+        cut_off = average_heterozygosity[cut_off_value - 1]
         check_paralogs.plotAverageHet(average_heterozygosity, cut_off, outDir_align_check_paralog)
         for filtered_align in loci_correct:
             new_alignment_path = os.path.join(outDir_align_check_temp, filtered_align)
-            if (check_paralogs.calcAverageIndivHet(new_alignment_path) < cut_off) == True:
+            if (check_paralogs.calcAverageIndivHet(new_alignment_path) <= cut_off) == True:
                 file_handle_correct.write(filtered_align + '\n')
                 file_handle_filtered.write(filtered_align + '\n')
                 subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_passed_alignments), shell=True)
