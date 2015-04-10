@@ -3,12 +3,13 @@ from Bio import AlignIO
 from Bio.Seq import *
 from Bio.Align import MultipleSeqAlignment
 from Bio.SeqRecord import SeqRecord
-from Bio.Alphabet import *
+from Bio import Alphabet
 import os
 import subprocess
 import sys
+import csv
 
-def select_final_alignments(filt_alignment_list_path, filt_align_path, individuals_list_path, number_missing_indivs_allowed, datatype, out_folder):
+def select_final_alignments(filt_alignment_list_path, filt_align_path, individuals_list_path, change_id, id_change_list_path, number_missing_indivs_allowed, datatype, final_align_format, out_folder):
     outDir_alignments = os.path.join(out_folder, "alignments")
     subprocess.call("mkdir '%s'" % (outDir_alignments), shell=True)
     indivs = []
@@ -39,19 +40,22 @@ def select_final_alignments(filt_alignment_list_path, filt_align_path, individua
         			indivs_in_align += 1
         		else:
         			pass
+                file_handle_out = open(alignPath, 'w')
+                AlignIO.write(alignment, file_handle_out, 'fasta')
+                file_handle_out.close()
         	if datatype == 'ambiguous':
         	    if (indiv_number - indivs_in_align) > number_missing_indivs_allowed:
         	        file_handle_not_included.write(name + "_gaps_analyzed.fasta" + '\n')
         	    else:
-        	        generate_final_alignment(name, alignPath, indivs, outDir_alignments)
-        	        file_handle_included.write(name + "_final_align.fasta" + '\n')
+                        generate_final_alignment(name, alignPath, indivs, change_id, id_change_list_path, final_align_format, outDir_alignments)
+        	        file_handle_included.write(name + "_final_align." + final_align_format + '\n')
         	        loci_included_counter += 1
         	elif datatype == 'haplotype':
         	    if (indiv_number - indivs_in_align) > (number_missing_indivs_allowed * 2):
         	        file_handle_not_included.write(name + "_gaps_analyzed.fasta" + '\n')
         	    else:
-                        generate_final_alignment(name, alignPath, indivs, outDir_alignments)
-                        file_handle_included.write(name + "_final_align.fasta" + '\n')
+                        generate_final_alignment(name, alignPath, indivs, change_id, id_change_list_path, final_align_format, outDir_alignments)
+                        file_handle_included.write(name + "_final_align." + final_align_format + '\n')
                         loci_included_counter += 1
                 else:
                     sys.exit("datatype not correctly specified, final alignment generation aborted")               		
@@ -61,7 +65,16 @@ def select_final_alignments(filt_alignment_list_path, filt_align_path, individua
         file_handle_not_included.close()
         return loci_included_counter
 
-def generate_final_alignment(base_name, alignment_path, indivs_list, out_folder):
+
+def findSpeciesID(sequence_id_name, dict_reader_object):
+    for line in dict_reader_object:
+        if line['old_ID'] == sequence_id_name:
+            return line['new_ID']
+        else:
+            pass
+
+
+def generate_final_alignment(base_name, alignment_path, indivs_list, change_id, id_change_list_path, final_align_format, out_folder):
     alignment = AlignIO.read(alignment_path, 'fasta')
     alignLength = alignment.get_alignment_length()
     indivs_in_align = []
@@ -74,18 +87,32 @@ def generate_final_alignment(base_name, alignment_path, indivs_list, out_folder)
                 if record.id == individual:
                     sequence = str(record.seq)
                     sequence = sequence.replace('-', 'N')
-                    msa_temp.append(SeqRecord(Seq(sequence, generic_alphabet), id=individual))
+                    if change_id == 1:
+                        names = open(id_change_list_path, 'rU')
+                        reader = csv.DictReader(names, delimiter = '\t')
+                        msa_temp.append(SeqRecord(Seq(sequence, alphabet = Alphabet.generic_dna), id=findSpeciesID(record.id, reader)))
+                        names.seek(0)
+                        names.close()
+                    else:
+                        msa_temp.append(SeqRecord(Seq(sequence, alphabet = Alphabet.generic_dna), id=individual))
                 else:
                     pass
         else:
-            missing_individual = SeqRecord(Seq("N"* alignLength), id=individual)
-            msa_temp.append(missing_individual)
-    final_alignment = MultipleSeqAlignment(msa_temp)
-    file_out = os.path.join(out_folder, (base_name + "_final_align.fasta"))
+            if change_id == 1:
+                names = open(id_change_list_path, 'rU')
+                reader = csv.DictReader(names, delimiter = '\t')
+                missing_individual = SeqRecord(Seq(("N"* alignLength), alphabet = Alphabet.generic_dna), id=findSpeciesID(individual, reader))
+                msa_temp.append(missing_individual)
+                names.seek(0)
+                names.close()
+            else:
+                missing_individual = SeqRecord(Seq("N"* alignLength), id=individual)
+                msa_temp.append(missing_individual)
+    final_alignment = MultipleSeqAlignment(msa_temp)       
+    file_out = os.path.join(out_folder, (base_name + "_final_align." + final_align_format))
     file_out_handle = open(file_out, "w")
-    AlignIO.write(final_alignment, file_out_handle, "fasta")
+    AlignIO.write(final_alignment, file_out_handle, final_align_format)
     file_out_handle.close()
-
 
 
 

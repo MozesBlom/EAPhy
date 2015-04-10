@@ -1,0 +1,10 @@
+old_ID	new_ID
+SP03_indexing44	SP03_i44
+SP10_indexing9	SP10_i9
+SP05_indexing52	SP05_i52
+SP04_indexing25	SP04_i25
+SP01A_indexing18	SP01A_i18
+SP01B_indexing46	SP01B_i46
+SP01B_indexing45	SP01B_i45
+SP04_indexing4	SP04_i4
+SP01B_indexing51	SP01B_i51

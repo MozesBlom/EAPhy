@@ -6,8 +6,8 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import *
 
 
-def findSite_Biallelic(alignment_path):
-    align = AlignIO.read(alignment_path, 'fasta')
+def findSite_Biallelic(alignment_path, alignment_format):
+    align = AlignIO.read(alignment_path, alignment_format)
     align.sort()
     align_length = align.get_alignment_length()
     align_length_counter = 0
@@ -187,8 +187,8 @@ def correctHeterozygote_Biallelic(input_string):
     else:
         return False
 
-def findSite(alignment_path):
-    align = AlignIO.read(alignment_path, 'fasta')
+def findSite(alignment_path, align_format):
+    align = AlignIO.read(alignment_path, align_format)
     align.sort()
     align_length = align.get_alignment_length()
     align_length_counter = 0

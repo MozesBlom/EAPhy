@@ -28,7 +28,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pylab import *
-
+from Bio import Alphabet
+from Bio.Align import MultipleSeqAlignment
 
 #########################
 # Input
@@ -73,11 +74,18 @@ snp_selection = 0   # SNP selection, only to be run when datatype = ambiguous!! 
 
 
 #########################
-# Datatype? Either 'haplotype' or 'ambiguous'
+# Input datatype? Either 'haplotype' or 'ambiguous'
 #########################
 
 datatype = 'ambiguous'  # If Datatype == 'haplotype', then this should be also indicated in the individuals file, with a single indiv having two lines followed by '_h0 and _h1': i.e. indiv_A_h0 and indiv_A_h1. The contig files should still be per gene and contain two entries for each individual, for each haplotype
 
+#########################
+# Which desired output format? Either 'fasta', 'phylip-sequential', 'phylip-sequential' or 'nexus'. Note, if 'phylip-sequential' used, then ALL individual names should be less than 10 characters long, see id_change
+#########################
+
+final_align_format = 'fasta'    # Alignment format of final alignments
+concat_align_format = 'fasta'   # Alignment format of concatenated alignment. Note, a 'phylip-sequential' output file is always generated, THUS TRUNCATED NAMES(!!) to 10 characters, since required for a Partition Finder run.
+snp_align_format = 'fasta'      # Alignment format of snp alignment
 
 #########################
 # Parameter settings
@@ -95,18 +103,19 @@ max_heterozygosity_ratio = 0.5  # Max ratio of amino acids that differ from cons
 
 average_heterozygosity_cut_off = 1  # Cut-off ratio used to flag potential paralogs (0 = all flagged, 1 = non-flagged), alignments with highest average heterozygosity levels, flagged in 'potential_paralogs.txt' output file
 
-## Number of missing indivs allowed
-indivs_included = individuals   # "path/to/list/"   # NOTE normally this should be the same as the individual list as specified above, however I kept this input file here so if you really want you can subselect individuals from the above list and you don't have to run the alignments again
-number_missing_indivs_allowed = [0, 2, 4] #(List of values between 0 (all indivs incl.) and total number of indivs, generates datasets with various amounts of missing data (individuals in this case))
+## Generate final alignments
+indivs_included = individuals               # "path/to/list/"   # NOTE normally this should be the same as the individual list as specified above, however I kept this input file here so if you really want you can subselect individuals from the above list and you don't have to run the alignments again
+number_missing_indivs_allowed = [0, 2, 4]   #(List of values between 0 (all indivs incl.) and total number of indivs, generates datasets with various amounts of missing data (individuals in this case))
+id_change = 1                               # Change sequence IDs (1 = yes, 0 = no)? If IDs are longer than 10 characters, phylip-sequential output files cannot be generated and thus no PartitionFinder input file.
+id_change_list = os.path.join(homePath,'specify_the_name_of_your_text_file_with_indivs')               # Path to a tab-delim text file where every current ID has a corresponding new name (two columns, first column head: old_ID, second column head: new_ID), that is less than 10 characters long
 
-## Minimum alignment length
+## Generate concatenated alignments
 min_align_length = 150          # Minimum length of alignments, to be included in the concatenated alignment
-
-## Set parameters settings for input file Partition Finder
-branch = "linked"       ## BRANCHLENGTHS: linked | unlinked ##
-model_evol = "raxml"    ## MODELS OF EVOLUTION for PartitionFinder: all | raxml | mrbayes | beast | <list> ##
-model_sel = "BIC"       ## MODEL SELECCTION: AIC | AICc | BIC #
-search = "rcluster"     ## SCHEMES, search: all | greedy | rcluster | hcluster | user ##
+#                               # Set parameters settings for input file Partition Finder
+branch = "linked"               ## BRANCHLENGTHS: linked | unlinked ##
+model_evol = "raxml"            ## MODELS OF EVOLUTION for PartitionFinder: all | raxml | mrbayes | beast | <list> ##
+model_sel = "BIC"               ## MODEL SELECCTION: AIC | AICc | BIC #
+search = "rcluster"             ## SCHEMES, search: all | greedy | rcluster | hcluster | user ##
 
 
 ## SNP selection
@@ -337,7 +346,7 @@ if (complete == 1) or (align_final == 1):
     for number in number_missing_indivs_allowed:
         outDir_final_align_number = os.path.join(outDir_final_align, ('%s_missing_indivs_allowed') % number)
         subprocess.call("mkdir '%s'" % (outDir_final_align_number), shell=True)
-        loci_number_recovered.append(final_align.select_final_alignments(list_loci_in_frame, outDir_align_check_filtered_alignments, indivs_included, number, datatype, outDir_final_align_number))
+        loci_number_recovered.append(final_align.select_final_alignments(list_loci_in_frame, outDir_align_check_filtered_alignments, indivs_included, id_change, id_change_list, number, datatype, final_align_format, outDir_final_align_number))
         values_used.append(number)        
     if len(number_missing_indivs_allowed) > 1:
         figure(2)
@@ -371,7 +380,7 @@ if datatype == 'ambiguous':
             outDir_final_align_number_alignments = os.path.join(outDir_final_align_number, 'alignments')
             outDir_concat_number = os.path.join(outDir_concat, ('%s_missing_indivs_allowed') % number)
             subprocess.call("mkdir '%s'" % (outDir_concat_number), shell=True)
-            concat.concatenateLoci(list_final_loci, indivs_included, outDir_final_align_number_alignments, min_align_length, outDir_concat_number, out_name,  branch, model_evol, model_sel, search)
+            concat.concatenateLoci(list_final_loci, outDir_final_align_number_alignments, min_align_length, outDir_concat_number, out_name, final_align_format, concat_align_format, branch, model_evol, model_sel, search)
     else:
         pass
 
@@ -408,14 +417,14 @@ if datatype == 'ambiguous':
                             if unique == 1:
                                 align_base_name = alignment.rsplit('_', 4)[0]
                             else:
-                                align_base_name = alignment.rsplit('_final_align.fasta', 1)[0]
+                                align_base_name = alignment.rsplit('_final_align', 1)[0]
                             if not align_base_name in loci_included:
                                 alignment_path = os.path.join(outDir_final_align_number, 'alignments', align_name)
                                 if biallelic == 1:
-                                    output_site_align = snp_selection.findSite_Biallelic(alignment_path)
+                                    output_site_align = snp_selection.findSite_Biallelic(alignment_path, final_align_format)
                                     output_site_align.sort()
                                 elif biallelic == 0:
-                                    output_site_align = snp_selection.findSite(alignment_path)
+                                    output_site_align = snp_selection.findSite(alignment_path, final_align_format)
                                     output_site_align.sort()
                                 else:
                                     sys.exit("Biallelic yes/no not correctly specified, SNP selection failed")
@@ -438,24 +447,26 @@ if datatype == 'ambiguous':
                                     pass
                             else:
                                 alignment_path = os.path.join(outDir_final_align_number,'alignments', align_name)
-                                output_site_align = snp_selection.findSite(alignment_path)
+                                output_site_align = snp_selection.findSite(alignment_path, final_align_format)
                                 output_site_align.sort()
                                 if (output_site_align.get_alignment_length()) > 0:
                                     snp_align_all = snp_align_all + output_site_align
                                 else:
                                     pass                       
-                        out_file_name = os.path.join(outDir_snp_number, ('snp_align_one_snp_gene_r_%s.fasta' % rep))
+                        snp_align_one = MultipleSeqAlignment(snp_align_one, alphabet = Alphabet.generic_dna)
+                        snp_align_all = MultipleSeqAlignment(snp_align_all, alphabet = Alphabet.generic_dna)
+                        out_file_name = os.path.join(outDir_snp_number, (('snp_align_one_snp_gene_r_%s.' % rep) + snp_align_format))
                         file_out_handle = open(out_file_name, 'w')
-                        AlignIO.write(snp_align_one, file_out_handle, 'fasta')
+                        AlignIO.write(snp_align_one, file_out_handle, snp_align_format)
                         file_out_handle.close()
                         out_file_name = os.path.join(outDir_snp_number, ('included_loci_one_snp_gene_r_%s.txt' % rep))
                         file_out_handle = open(out_file_name, 'w')
                         for line in loci_included:
                             file_out_handle.write(line + '\n')
                         file_out_handle.close()
-                        out_file_name = os.path.join(outDir_snp_number, ('snp_align_all_snps_gene_r_%s.fasta' % rep))
+                        out_file_name = os.path.join(outDir_snp_number, (('snp_align_all_snps_gene_r_%s.' % rep) + snp_align_format))
                         file_out_handle = open(out_file_name, 'w')
-                        AlignIO.write(snp_align_all, file_out_handle, 'fasta')
+                        AlignIO.write(snp_align_all, file_out_handle, snp_align_format)
                         file_out_handle.close()
                         loci_file.seek(0)
                 else:
