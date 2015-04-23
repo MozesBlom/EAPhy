@@ -80,7 +80,7 @@ snp_selection = 0   # SNP selection, only to be run when datatype = ambiguous!! 
 datatype = 'ambiguous'  # If Datatype == 'haplotype', then this should be also indicated in the individuals file, with a single indiv having two lines followed by '_h0 and _h1': i.e. indiv_A_h0 and indiv_A_h1. The contig files should still be per gene and contain two entries for each individual, for each haplotype
 
 #########################
-# Which desired output format? Either 'fasta', 'phylip-sequential', 'phylip-sequential' or 'nexus'. Note, if 'phylip-sequential' used, then ALL individual names should be less than 10 characters long, see id_change
+# Which desired output format? Either 'fasta', 'phylip-sequential', 'phylip-relaxed' or 'nexus'. Note, if 'phylip-sequential' used, then ALL individual names should be less than 10 characters long, see id_change
 #########################
 
 final_align_format = 'fasta'    # Alignment format of final alignments
