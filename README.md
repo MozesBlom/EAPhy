@@ -5,7 +5,7 @@ EAPhy, consists of a collection of scripts that jointly process exonic sequences
 
 All scripts are written in Python and throughout the pipeline, many functions benefit from modules that have been developed as part of the BioPython distribution (http:// biopython.org/wiki/Main_Page).
 
-Feel free to use EAPhy or any of its associated scripts, but please acknowledge the great work of the BioPython team and the communication describing EAPhy (Blom MPK, 2015) in any forthcoming publications.
+Feel free to use EAPhy or any of its associated scripts, but please acknowledge the great work of the BioPython team and the communication describing EAPhy (Blom, 2015) in any forthcoming publications.
 
 Please contact me if any issues arise or you have any suggestions/requests.
 
