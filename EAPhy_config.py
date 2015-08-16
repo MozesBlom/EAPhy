@@ -21,6 +21,7 @@ import os
 import sys
 import Bio
 from Bio import AlignIO
+from Bio import SeqIO
 import subprocess
 import csv
 from random import randrange
@@ -64,7 +65,7 @@ aligner = "/Specify/path/to/muscle3.8.31"
 
 complete = 1        # Run complete analysis
 
-subset_indivs = 0   # Create contigs with individuals as specified in 'individuals'
+subset_indivs = 0   # Create contigs with individuals as specified in 'individuals', if you already have the exact individuals you want then set to 0 and create the subset folder manually! (see manual)
 alignments = 0      # Generate the Muscle alignments
 align_check = 0     # Conduct the amino-acid coding alignment checks, as described in REF
 align_stats = 0     # Calculate alignment statistics
@@ -91,6 +92,11 @@ snp_align_format = 'fasta'      # Alignment format of snp alignment
 # Parameter settings
 #########################
 
+## Contig criteria
+min_contig_ln = 150             # The minimum length of each contig for each locus, to be considered for alignment
+n_ratio = 0.40                  # The maximum ratio of N's/basecalls allowed for each contig for each locus, to be considered for alignment. So if n_ratio == 0.40, then if there are more than 4 Ns in a 10 bp. contig, the contig is not included
+min_indiv = 60                  # The minimum number of contigs (indivs) that have to be present for a given locus to be considered for alignment
+
 ## Alignment filtering
 max_stop = 1                    # Max number of stop codons allowed for each sequence in each alignment (checked simultaneously for 1st, 2nd and 3rd frame, if required filt_align put in correct frame), otherwise flagged in 'alignments_to_check.txt' output file
 indiv_gap_window = 7            # Jump-sliding-window length (in amino acids) used to filter out individual gaps
@@ -105,9 +111,9 @@ average_heterozygosity_cut_off = 1  # Cut-off ratio used to flag potential paral
 
 ## Generate final alignments
 indivs_included = individuals               # "path/to/list/"   # NOTE normally this should be the same as the individual list as specified above, however I kept this input file here so if you really want you can subselect individuals from the above list and you don't have to run the alignments again
-number_missing_indivs_allowed = [0, 2, 4]   #(List of values between 0 (all indivs incl.) and total number of indivs, generates datasets with various amounts of missing data (individuals in this case))
+number_missing_indivs_allowed = [0, 1, 2, 3, 4, 5, 7, 10, 15, 20]   #(List of values between 0 (all indivs incl.) and total number of indivs, generates datasets with various amounts of missing data (individuals in this case))
 id_change = 1                               # Change sequence IDs (1 = yes, 0 = no)? If IDs are longer than 10 characters, phylip-sequential output files cannot be generated and thus no PartitionFinder input file.
-id_change_list = os.path.join(homePath,'specify_the_name_of_your_text_file_with_indivs')               # Path to a tab-delim text file where every current ID has a corresponding new name (two columns, first column head: old_ID, second column head: new_ID), that is less than 10 characters long
+id_change_list = os.path.join(homePath,'id_change_diplo.txt')               # Path to a tab-delim text file where every current ID has a corresponding new name (two columns, first column head: old_ID, second column head: new_ID), that is less than 10 characters long
 
 ## Generate concatenated alignments
 min_align_length = 150          # Minimum length of alignments, to be included in the concatenated alignment
@@ -119,8 +125,10 @@ search = "rcluster"             ## SCHEMES, search: all | greedy | rcluster | hc
 
 
 ## SNP selection
-biallelic = 1           # Biallelic enforced? 1 = yes, 0 = no. If yes, then SNP positions can only be biallelic, sites that contain genotypes that would result in more than 2 alleles are not considered. If no, ALL polymorphic sites are considered.
-reps = 3                # How often should the random SNP selection be repeated?
+N_ratio = 0.2           # For each site, the maximum ratio of N to basecalls (0 = no N, 1 = hypothetically no limit on N) for it to still be considered for SNP selection
+least_n = 1             # If randomly sampling a single SNP from each gene, only randomly sample from the sites with the least number of N's? 1 = yes, 0 = no.
+biallelic = 0           # Biallelic enforced? 1 = yes, 0 = no. If yes, then SNP positions can only be biallelic, sites that contain genotypes that would result in more than 2 alleles are not considered. If no, ALL polymorphic sites are considered.
+reps = 2                # How often should the random SNP selection be repeated?
 unique = 1              # Sample only one SNP per gene? 1 = yes, 0 = no. If yes, then MAKE SURE THAT YOUR EXONS ARE NAMED IN FOLLOWING FORMAT (and accordingly specified in the exon list): gene_exonNumber_species.fasta. So EXACTLY 2 underscores and starting with the gene name. It will then make sure that only one snp per gene is sampled (i.e. a SNAPP requirement)
 
 #########################
@@ -175,9 +183,9 @@ if (complete == 1) or (subset_indivs == 1):
     target_exons_file = open(exons, 'rU')
     for exon in target_exons_file:
         name = exon.rsplit('.fasta', 1)[0]
-        exon_subset_list.append(subsetIndivs.createSubsetContigs(name, individuals, bestcontigPath, outDir_subset))
+        exon_subset_list.append(subsetIndivs.createSubsetContigs(name, min_contig_ln, n_ratio, individuals, bestcontigPath, outDir_subset))
     target_exons_file.close()
-    print 'Best contigs subsetted to include only individuals as specified in %s' % (individuals)
+    print 'Best contigs subsetted to include only individuals as specified in %s, if at least %s bp long and if the the ratio of Ns is below %s' % (individuals, str(min_contig_ln), str(n_ratio))
 else:
     pass
 
@@ -187,6 +195,7 @@ outDir_align = os.path.join(outDir, "2.alignments")
 outDir_align_basic = os.path.join(outDir_align, "1.basic_alignments")
 if (complete == 1) or (alignments == 1):
     import runAlignment
+    aln_counter = 0
     if os.path.isdir(outDir_align):
         pass
     else:
@@ -195,8 +204,49 @@ if (complete == 1) or (alignments == 1):
         pass
     else:
         subprocess.call("mkdir '%s'" % (outDir_align_basic), shell=True)
-        for subset_contig in exon_subset_list:
-            runAlignment.alignments(subset_contig, outDir_subset, outDir_align_basic, aligner)
+        ctg_few = []
+        if (complete == 1) or (subset_indivs == 1):
+            for subset_contig in exon_subset_list:
+                indv_no = 0
+                ctg_file = open(os.path.join(outDir_subset, subset_contig), "rU")
+                fsta_file = SeqIO.parse(ctg_file, 'fasta')
+                for record in fsta_file:
+                    indv_no += 1
+                ctg_file.close()
+                if indv_no >= min_indiv:        
+                    runAlignment.alignments(subset_contig, outDir_subset, outDir_align_basic, aligner, True)
+                    aln_counter += 1
+                else:
+                    ctg_few.append(subset_contig)
+        else:
+            target_exons_file = open(exons, 'rU')
+            for exon in target_exons_file:
+                name = exon.rsplit('\n')[0]
+                indv_no = 0
+                ctg_file = open(os.path.join(outDir_subset, name), "rU")
+                fsta_file = SeqIO.parse(ctg_file, 'fasta')
+                for record in fsta_file:
+                    indv_no += 1
+                ctg_file.close()
+                if indv_no >= min_indiv:        
+                    runAlignment.alignments(name, outDir_subset, outDir_align_basic, aligner, False)
+                    aln_counter += 1
+                else:
+                    ctg_few.append(exon)
+            target_exons_file.close()
+        if len(ctg_few) > 0:
+            small_contig_number = os.path.join(outDir_align, 'alignments_too_few_indivs_post_contig_len_Ns_check.txt')
+            file_handle_ctg = open(small_contig_number, 'w')
+            file_handle_ctg.write('# Here are the LOCI listed which had too few individuals that passed the contig criteria (each indiv contig assessed for min align length and n-ratio) and are therefore excluded from further analyses')
+            for locus in ctg_few:
+                file_handle_ctg.write(locus + '\n')
+            file_handle_ctg.close()
+        else:
+            pass
+    if aln_counter == 0:
+        sys.exit("No alignments were conducted, check whether settings for pre-align criteria (e.g. min align length, n-ratio or min # of indivs present) too strict?")
+    else:
+        pass
 else:
     pass
 
@@ -226,22 +276,30 @@ if (complete == 1) or (align_check == 1):
         subprocess.call("mkdir '%s'" % (outDir_align_check_inspect), shell=True)
         subprocess.call("mkdir '%s'" % (outDir_align_check_inspect_alignments), shell=True)
         subprocess.call("mkdir '%s'" % (outDir_align_check_filtered), shell=True)
-    list_passed_align = os.path.join(outDir_align_check_passed, 'alignments_passed.txt')
-    list_inspect_align = os.path.join(outDir_align_check_inspect, 'alignments_require_inspection.txt')
-    list_filtered_align = os.path.join(outDir_align_check_filtered, 'alignments_filtered.txt')
+    list_passed_align = os.path.join(outDir_align_check_passed, 'alignments_passed.txt')                                    # Alignments that passed the gap filtering
+    list_inspect_align = os.path.join(outDir_align_check_inspect, 'alignments_require_inspection.txt')                      # Alignments that did not pass the gap filtering
+    list_filtered_align = os.path.join(outDir_align_check_filtered, 'alignments_filtered.txt')                              # Alignments that also passed the paralog and divergence filtering
+    list_align_short = os.path.join(outDir_align_check_filtered, 'alignments_too_short_to_inspect.txt')                    # Alignments that weren't even included for gap filtering at all because they were too short
     file_handle_correct = open(list_passed_align, 'w')
     file_handle_wrong = open(list_inspect_align, 'w')
     file_handle_filtered = open(list_filtered_align, 'w')
+    file_handle_short = open(list_align_short, 'w')
+    file_handle_short.write('# Here are the ALIGNMENTS listed that were too short given the window length (i.e. indiv_gap_window, column_gap_window) specified for post-alignment check')
     empty_align = []
     for alignment in os.listdir(outDir_align_basic):
         if alignment.endswith("_basic_align.fasta"):
             alignment_path = os.path.join(outDir_align_basic, alignment)
-            align_length_zero = check_frame_gaps.removeGaps(alignment, alignment_path, outDir_align_check_temp, indiv_gap_window, indiv_gap_ratio, column_gap_window, column_gap_ratio, max_insertion_cut_off)
-            if align_length_zero == True: #If the alignment is empty we don't want to include it and therefore needs to be flagged!!
-                empty_align_base_name = alignment.rsplit('_basic_align.fasta', 1)[0]
-                empty_align.append(empty_align_base_name)
-            else:
-                pass                    
+            if check_frame_gaps.aln_len_check(alignment_path, indiv_gap_window, column_gap_window) == True:
+                align_length = check_frame_gaps.removeGaps(alignment, alignment_path, outDir_align_check_temp, indiv_gap_window, indiv_gap_ratio, column_gap_window, column_gap_ratio, max_insertion_cut_off)
+                if (int(align_length) == 0) or ((float(align_length)/3) < sliding_window_div_check): #If the alignment is empty (False), or is smaller than the alignment used for divergence check, we don't want to include it and therefore needs to be flagged!!
+                    empty_align_base_name = alignment.rsplit('_basic_align.fasta', 1)[0]
+                    file_handle_wrong.write(empty_align_base_name + '\n')
+                    empty_align.append(empty_align_base_name)
+                else:
+                    pass
+            else:                
+                short_align_base_name = alignment.rsplit('_basic_align.fasta', 1)[0]
+                file_handle_short.write(short_align_base_name + '\n')
         else:
             pass
     loci_correct = []
@@ -249,8 +307,7 @@ if (complete == 1) or (align_check == 1):
         if new_alignment.endswith("_gaps_analyzed.fasta"):
             new_align_base_name = new_alignment.rsplit('_gaps_analyzed.fasta', 1)[0]
             new_alignment_path = os.path.join(outDir_align_check_temp, new_alignment) 
-            if new_align_base_name in empty_align:
-                file_handle_wrong.write(new_alignment + '\n')
+            if (new_align_base_name in empty_align):               
                 subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_inspect_alignments), shell=True)
             else:
                 if (check_frame_gaps.identifyStopCodons(new_alignment_path, max_stop) == True) and (check_frame_gaps.identifyDivAlign(new_alignment_path, sliding_window_div_check, max_heterozygosity_ratio) == True):
@@ -277,7 +334,7 @@ if (complete == 1) or (align_check == 1):
         check_paralogs.plotAverageHet(average_heterozygosity, cut_off, outDir_align_check_paralog)
         for filtered_align in loci_correct:
             new_alignment_path = os.path.join(outDir_align_check_temp, filtered_align)
-            if (check_paralogs.calcAverageIndivHet(new_alignment_path) <= cut_off) == True:
+            if (check_paralogs.calcAverageIndivHet(new_alignment_path) <= cut_off) == True:                 # Why do I make both a text file from file_handle_correct and file_handle_filtered, potentially get rid of 'alignments_passed.txt'??
                 file_handle_correct.write(filtered_align + '\n')
                 file_handle_filtered.write(filtered_align + '\n')
                 subprocess.call("mv '%s' '%s'" % (new_alignment_path, outDir_align_check_passed_alignments), shell=True)
@@ -294,6 +351,7 @@ if (complete == 1) or (align_check == 1):
     file_handle_wrong.close()
     file_handle_correct.close()
     file_handle_filtered.close()
+    file_handle_short.close()
     subprocess.call("rm -r '%s'" % (outDir_align_check_temp), shell=True)
     subprocess.call("cp -r '%s' '%s'" % (outDir_align_check_passed_alignments, outDir_align_check_filtered), shell=True)
 else:
@@ -421,11 +479,19 @@ if datatype == 'ambiguous':
                             if not align_base_name in loci_included:
                                 alignment_path = os.path.join(outDir_final_align_number, 'alignments', align_name)
                                 if biallelic == 1:
-                                    output_site_align = snp_selection.findSite_Biallelic(alignment_path, final_align_format)
-                                    output_site_align.sort()
+                                    output_site_align = snp_selection.findSite_Biallelic(alignment_path, final_align_format, N_ratio)
+                                    if least_n == 1:
+                                        output_site_align = snp_selection.findSNP_leastN(output_site_align)
+                                        output_site_align.sort()
+                                    else:
+                                        output_site_align.sort()
                                 elif biallelic == 0:
-                                    output_site_align = snp_selection.findSite(alignment_path, final_align_format)
-                                    output_site_align.sort()
+                                    output_site_align = snp_selection.findSite(alignment_path, final_align_format, N_ratio)
+                                    if least_n == 1:
+                                        output_site_align = snp_selection.findSNP_leastN(output_site_align)
+                                        output_site_align.sort()
+                                    else:
+                                        output_site_align.sort()
                                 else:
                                     sys.exit("Biallelic yes/no not correctly specified, SNP selection failed")
                                 if (output_site_align.get_alignment_length()) > 0:
@@ -447,12 +513,20 @@ if datatype == 'ambiguous':
                                     pass
                             else:
                                 alignment_path = os.path.join(outDir_final_align_number,'alignments', align_name)
-                                output_site_align = snp_selection.findSite(alignment_path, final_align_format)
-                                output_site_align.sort()
-                                if (output_site_align.get_alignment_length()) > 0:
-                                    snp_align_all = snp_align_all + output_site_align
-                                else:
-                                    pass                       
+                                if biallelic == 1:
+                                    output_site_align = snp_selection.findSite_Biallelic(alignment_path, final_align_format, N_ratio)
+                                    output_site_align.sort()
+                                    if (output_site_align.get_alignment_length()) > 0:
+                                        snp_align_all = snp_align_all + output_site_align
+                                    else:
+                                        pass
+                                if biallelic == 0:
+                                    output_site_align = snp_selection.findSite(alignment_path, final_align_format, N_ratio)
+                                    output_site_align.sort()
+                                    if (output_site_align.get_alignment_length()) > 0:
+                                        snp_align_all = snp_align_all + output_site_align
+                                    else:
+                                        pass                    
                         snp_align_one = MultipleSeqAlignment(snp_align_one, alphabet = Alphabet.generic_dna)
                         snp_align_all = MultipleSeqAlignment(snp_align_all, alphabet = Alphabet.generic_dna)
                         out_file_name = os.path.join(outDir_snp_number, (('snp_align_one_snp_gene_r_%s.' % rep) + snp_align_format))

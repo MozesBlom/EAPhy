@@ -6,6 +6,18 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
 import os
 
+def aln_len_check(alignment_path, indiv_gap_window, column_gap_window):
+    file_handle = open(alignment_path, 'r')
+    temp = AlignIO.read(file_handle, 'fasta')
+    alignment_length = temp.get_alignment_length()
+    aa_len = float(alignment_length)/float(3)
+    file_handle.close()
+    if (aa_len >= indiv_gap_window) and (aa_len >= column_gap_window):
+        return True
+    else:
+        return False
+
+
 def removeGaps(alignment, alignment_path, outDir_align_check_temp, indiv_gap_window, indiv_gap_ratio, column_gap_window, column_gap_ratio, max_insertion_cut_off):
     name = alignment.rsplit('_basic_align.fasta', 1)[0]
     file_in_handle = open(alignment_path, 'rU')
@@ -109,10 +121,7 @@ def removeGaps(alignment, alignment_path, outDir_align_check_temp, indiv_gap_win
         AlignIO.write(final_align, file_out_handle, "fasta")
         file_in_handle.close()
         file_out_handle.close()
-        if final_align_length == 0:
-            return True
-        else:
-            return False
+        return final_align_length
     elif align_counter == 1:
         for record in muscle_align:
             sequence = str(record.seq)
@@ -143,12 +152,9 @@ def removeGaps(alignment, alignment_path, outDir_align_check_temp, indiv_gap_win
         AlignIO.write(temp_alignment, file_out_handle, "fasta")
         file_in_handle.close()
         file_out_handle.close()
-        if temp_alignment_length == 0:
-            return True
-        else:
-            return False
+        return temp_alignment_length
     else:
-        pass
+        return 0
 
 
 
@@ -202,6 +208,7 @@ def identifyStopCodons(alignment_path, max_stop):
     temp = AlignIO.read(file_handle, 'fasta')
     alignment_length = temp.get_alignment_length()
     record_count = 0
+    first_frame_count = 0
     second_frame_count = 0
     third_frame_count = 0
     for record in temp:
@@ -209,24 +216,72 @@ def identifyStopCodons(alignment_path, max_stop):
         sequence = str(record.seq)
         sequence_length = len(sequence)
         sequence = sequence.replace("-", "N")
-        convert = translate(sequence)
-        if convert.count("*") > max_stop:
-            sequence_second_frame = sequence[1:(sequence_length - 2)]
-            convert_second_frame = translate(sequence_second_frame)
-            if convert_second_frame.count("*") > max_stop:
-                sequence_third_frame = sequence[2:(sequence_length - 1)]
-                convert_third_frame = translate(sequence_third_frame)
-                if convert_third_frame.count("*") > max_stop:
-                    return False
-                    break
-                else:
-                    third_frame_count += 1
+        codon_n = 0
+        stretch_check = 0
+        stop_count_first_frame = 0
+        while stretch_check < sequence_length:                                                                      # Count the number of stop codons for this given sequence, in all three reading frames
+            codon = sequence[((0 + codon_n)*3):((codon_n + 1)*3)]
+            if (codon == 'TGA') or (codon == 'TAA') or (codon == 'TAG'):
+                stop_count_first_frame += 1
+                codon_n += 1
             else:
-                second_frame_count += 1
-        else:
-            continue
-    file_handle.close()
-    if (float(second_frame_count)/float(record_count)) > 0.5:
+                codon_n += 1
+            stretch_check = (codon_n + 1) * 3
+        sequence_second_frame = sequence[1:(sequence_length - 2)]
+        sequence_length_second_frame = len(sequence_second_frame)
+        stop_count_second_frame = 0
+        codon_n = 0
+        stretch_check = 0
+        while stretch_check < sequence_length_second_frame:
+            codon = sequence_second_frame[((0 + codon_n)*3):((codon_n + 1)*3)]
+            if (codon == 'TGA') or (codon == 'TAA') or (codon == 'TAG'):
+                stop_count_second_frame += 1
+                codon_n += 1
+            else:
+                codon_n += 1
+            stretch_check = (codon_n + 1) * 3
+        sequence_third_frame = sequence[2:(sequence_length - 1)]
+        sequence_length_third_frame = len(sequence_third_frame)
+        stop_count_third_frame = 0
+        codon_n = 0
+        stretch_check = 0
+        while stretch_check < sequence_length_third_frame:
+            codon = sequence_third_frame[((0 + codon_n)*3):((codon_n + 1)*3)]
+            if (codon == 'TGA') or (codon == 'TAA') or (codon == 'TAG'):
+                stop_count_third_frame += 1
+                codon_n += 1
+            else:
+                codon_n += 1
+            stretch_check = (codon_n + 1) * 3
+        if (stop_count_first_frame <= stop_count_second_frame) and (stop_count_first_frame <= stop_count_third_frame):  # Check whether the number of stop codon for this individual is higher in firs, second or third frame
+            if stop_count_first_frame > max_stop:
+                return False
+            else:
+                if stop_count_first_frame == stop_count_second_frame:
+                    first_frame_count += 1
+                    second_frame_count += 1
+                elif stop_count_first_frame == stop_count_third_frame:
+                    first_frame_count += 1
+                    third_frame_count += 1
+                else:
+                    first_frame_count += 1
+        elif (stop_count_second_frame <= stop_count_third_frame):
+            if stop_count_second_frame > max_stop:
+                return False
+            else:
+                if stop_count_second_frame == stop_count_third_frame:
+                    second_frame_count += 1
+                    third_frame_count += 1
+                else:
+                    second_frame_count += 1
+        else: 
+            if stop_count_third_frame > max_stop:
+                return False
+            else:
+                third_frame_count += 1
+    if (first_frame_count >= second_frame_count) and (first_frame_count >= third_frame_count):  # Check whether the number of stop codons for each individuals, across all individuas, was higher in first, second, or third frame
+        return True
+    elif second_frame_count >= third_frame_count:
         file_handle = open(alignment_path, 'r')
         alignment_old = AlignIO.read(file_handle, 'fasta')
         file_handle.close()
@@ -235,8 +290,6 @@ def identifyStopCodons(alignment_path, max_stop):
         AlignIO.write(alignment_new, file_handle_out, "fasta")
         file_handle_out.close()
     else:
-        pass
-    if (float(third_frame_count)/float(record_count)) > 0.5:
         file_handle = open(alignment_path, 'r')
         alignment_old = AlignIO.read(file_handle, 'fasta')
         file_handle.close()
@@ -244,8 +297,6 @@ def identifyStopCodons(alignment_path, max_stop):
         file_handle_out = open(alignment_path, 'w')
         AlignIO.write(alignment_new, file_handle_out, "fasta")
         file_handle_out.close()
-    else:
-        pass
     return True
 
 

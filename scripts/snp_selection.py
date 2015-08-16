@@ -6,43 +6,63 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Alphabet import *
 
 
-def findSite_Biallelic(alignment_path, alignment_format):
+def findSNP_leastN(alignment):
+    alignment.sort()
+    indiv_count = 0
+    msa_temp = []
+    aln_len = alignment.get_alignment_length()
+    for record in alignment:
+        msa_temp.append(SeqRecord(Seq('', generic_alphabet), id=record.id))
+        indiv_count += 1
+    final_snp_align = MultipleSeqAlignment(msa_temp)
+    aln_len_counter = 0
+    N_min = indiv_count
+    while aln_len_counter < aln_len:
+        site = alignment[:, aln_len_counter]
+        N = site.count('N')
+        aln_len_counter += 1
+        if N < N_min:
+            N_min = N
+        else:
+            pass
+    aln_len_counter = 0
+    while aln_len_counter < aln_len:
+        site = alignment[:, aln_len_counter]
+        N = site.count('N')
+        if N == N_min:
+            final_snp_align = final_snp_align + alignment[:, (aln_len_counter):(aln_len_counter+1)]
+            aln_len_counter += 1
+        else:
+            aln_len_counter += 1
+    return final_snp_align
+
+
+def findSite_Biallelic(alignment_path, alignment_format, N_ratio):
     align = AlignIO.read(alignment_path, alignment_format)
     align.sort()
     align_length = align.get_alignment_length()
     align_length_counter = 0
-    complete_site_value = 0
     indiv_number = 0
     msa_temp = []
     for record in align:
         msa_temp.append(SeqRecord(Seq('', generic_alphabet), id=record.id))
-        complete_site_value += 1
         indiv_number += 1
     final_snp_align = MultipleSeqAlignment(msa_temp)
     while align_length_counter < align_length:
         site = align[:, align_length_counter]
         N = site.count('N')
-        if N < complete_site_value:
-            complete_site_value = N
-            align_length_counter += 1
-        else:
-            complete_site_value = complete_site_value 
-            align_length_counter += 1  
-    align_length_counter = 0
-    most_complete_value_cut_off = indiv_number - complete_site_value
-    while align_length_counter < align_length:
-        site = align[:, align_length_counter]
-        if site.count('N') == complete_site_value:
-            snp = findSNP_Biallelic(site, most_complete_value_cut_off)
+        if ((float(N)/float(indiv_number)) <= N_ratio):
+            snp = findSNP_Biallelic(site, indiv_number)
             if snp == True:
                 final_snp_align = final_snp_align + align[:, (align_length_counter):(align_length_counter+1)]
                 align_length_counter += 1
             else:
                 align_length_counter += 1
         else:
-            align_length_counter += 1    
-    return final_snp_align
-    
+            align_length_counter += 1
+    return final_snp_align          
+
+
 def findSNP_Biallelic(site, indiv_number):
     snp = []
     a = site.count('A')
@@ -59,33 +79,34 @@ def findSNP_Biallelic(site, indiv_number):
     d = site.count('D')
     h = site.count('H')
     v = site.count('V')
-    if (a != (indiv_number)) and (a != 0):
+    n = site.count('N')
+    if (a != (indiv_number - n)) and (a != 0):
         snp.append('yes')
-    elif (t != (indiv_number)) and (t != 0):
+    elif (t != (indiv_number - n)) and (t != 0):
         snp.append('yes')
-    elif (c != (indiv_number)) and (c != 0):
+    elif (c != (indiv_number - n)) and (c != 0):
         snp.append('yes')
-    elif (g != (indiv_number)) and (g != 0):
+    elif (g != (indiv_number - n)) and (g != 0):
         snp.append('yes')
-    elif (r != (indiv_number)) and (r != 0):
+    elif (r != (indiv_number - n)) and (r != 0):
         snp.append('yes')
-    elif (y != (indiv_number)) and (y != 0):
+    elif (y != (indiv_number - n)) and (y != 0):
         snp.append('yes')
-    elif (s != (indiv_number)) and (s != 0):
+    elif (s != (indiv_number - n)) and (s != 0):
         snp.append('yes')
-    elif (w != (indiv_number)) and (w != 0):
+    elif (w != (indiv_number - n)) and (w != 0):
         snp.append('yes')
-    elif (k != (indiv_number)) and (k != 0):
+    elif (k != (indiv_number - n)) and (k != 0):
         snp.append('yes')
-    elif (m != (indiv_number)) and (m != 0):
+    elif (m != (indiv_number - n)) and (m != 0):
         snp.append('yes')
-    elif (b != (indiv_number)) and (b != 0):
+    elif (b != (indiv_number - n)) and (b != 0):
         snp.append('yes') 
-    elif (d != (indiv_number)) and (d != 0):
+    elif (d != (indiv_number - n)) and (d != 0):
         snp.append('yes')
-    elif (h != (indiv_number)) and (h != 0):
+    elif (h != (indiv_number - n)) and (h != 0):
         snp.append('yes')
-    elif (v != (indiv_number)) and (v != 0):
+    elif (v != (indiv_number - n)) and (v != 0):
         snp.append('yes')
     else: 
         snp.append('no')
@@ -187,42 +208,30 @@ def correctHeterozygote_Biallelic(input_string):
     else:
         return False
 
-def findSite(alignment_path, align_format):
-    align = AlignIO.read(alignment_path, align_format)
+def findSite(alignment_path, alignment_format, N_ratio):
+    align = AlignIO.read(alignment_path, alignment_format)
     align.sort()
     align_length = align.get_alignment_length()
     align_length_counter = 0
-    complete_site_value = 0
     indiv_number = 0
     msa_temp = []
     for record in align:
         msa_temp.append(SeqRecord(Seq('', generic_alphabet), id=record.id))
-        complete_site_value += 1
         indiv_number += 1
     final_snp_align = MultipleSeqAlignment(msa_temp)
     while align_length_counter < align_length:
         site = align[:, align_length_counter]
         N = site.count('N')
-        if N < complete_site_value:
-            complete_site_value = N
-            align_length_counter += 1
-        else:
-            complete_site_value = complete_site_value 
-            align_length_counter += 1  
-    align_length_counter = 0
-    most_complete_value_cut_off = indiv_number - complete_site_value
-    while align_length_counter < align_length:
-        site = align[:, align_length_counter]
-        if site.count('N') == complete_site_value:
-            snp = findSNP(site, most_complete_value_cut_off)
+        if ((float(N)/float(indiv_number)) <= N_ratio):
+            snp = findSNP(site, indiv_number)
             if snp == True:
                 final_snp_align = final_snp_align + align[:, (align_length_counter):(align_length_counter+1)]
                 align_length_counter += 1
             else:
                 align_length_counter += 1
         else:
-            align_length_counter += 1    
-    return final_snp_align
+            align_length_counter += 1
+    return final_snp_align          
     
 def findSNP(site, indiv_number):
     snp = []
@@ -240,33 +249,34 @@ def findSNP(site, indiv_number):
     d = site.count('D')
     h = site.count('H')
     v = site.count('V')
-    if (a != (indiv_number)) and (a != 0):
+    n = site.count('N')
+    if (a != (indiv_number - n)) and (a != 0):
         snp.append('yes')
-    elif (t != (indiv_number)) and (t != 0):
+    elif (t != (indiv_number - n)) and (t != 0):
         snp.append('yes')
-    elif (c != (indiv_number)) and (c != 0):
+    elif (c != (indiv_number - n)) and (c != 0):
         snp.append('yes')
-    elif (g != (indiv_number)) and (g != 0):
+    elif (g != (indiv_number - n)) and (g != 0):
         snp.append('yes')
-    elif (r != (indiv_number)) and (r != 0):
+    elif (r != (indiv_number - n)) and (r != 0):
         snp.append('yes')
-    elif (y != (indiv_number)) and (y != 0):
+    elif (y != (indiv_number - n)) and (y != 0):
         snp.append('yes')
-    elif (s != (indiv_number)) and (s != 0):
+    elif (s != (indiv_number - n)) and (s != 0):
         snp.append('yes')
-    elif (w != (indiv_number)) and (w != 0):
+    elif (w != (indiv_number - n)) and (w != 0):
         snp.append('yes')
-    elif (k != (indiv_number)) and (k != 0):
+    elif (k != (indiv_number - n)) and (k != 0):
         snp.append('yes')
-    elif (m != (indiv_number)) and (m != 0):
+    elif (m != (indiv_number - n)) and (m != 0):
         snp.append('yes')
-    elif (b != (indiv_number)) and (b != 0):
+    elif (b != (indiv_number - n)) and (b != 0):
         snp.append('yes') 
-    elif (d != (indiv_number)) and (d != 0):
+    elif (d != (indiv_number - n)) and (d != 0):
         snp.append('yes')
-    elif (h != (indiv_number)) and (h != 0):
+    elif (h != (indiv_number - n)) and (h != 0):
         snp.append('yes')
-    elif (v != (indiv_number)) and (v != 0):
+    elif (v != (indiv_number - n)) and (v != 0):
         snp.append('yes')
     else: 
         snp.append('no')
