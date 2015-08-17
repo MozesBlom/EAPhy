@@ -7,6 +7,8 @@ All scripts are written in Python and throughout the pipeline, many functions be
 
 Feel free to use EAPhy or any of its associated scripts, but please acknowledge the great work of the BioPython team and the communication describing EAPhy (Blom, 2015) in any forthcoming publications.
 
+I will continue to update EAPhy and subsequent versions (> V1.0) will have additional functionalities - bug fixes.
+
 Please contact me if any issues arise or you have any suggestions/requests.
 
 Mozes Blom
